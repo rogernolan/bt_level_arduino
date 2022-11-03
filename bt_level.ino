@@ -6,12 +6,12 @@
 #include "bt_constants.h"
 
 BLEService levelService(LEVEL_SERVICE_UUID); // creating the service
-BLEFloatCharacteristic headingCharacteristic(HEADING_CHARACTERISTIC_UUID, BLERead); // characteristic for heading
-BLEFloatCharacteristic rollCharacteristic(ROLL_CHARACTERISTIC_UUID, BLERead); // characteristic for Roll
-BLEFloatCharacteristic pitchCharacteristic(PITCH_CHARACTERISTIC_UUID, BLERead); // characteristic for pitch
+BLEFloatCharacteristic headingCharacteristic(HEADING_CHARACTERISTIC_UUID, BLERead | BLENotify); // characteristic for heading
+BLEFloatCharacteristic rollCharacteristic(ROLL_CHARACTERISTIC_UUID, BLERead | BLENotify); // characteristic for Roll
+BLEFloatCharacteristic pitchCharacteristic(PITCH_CHARACTERISTIC_UUID, BLERead | BLENotify); // characteristic for pitch
 
 BLEBoolCharacteristic ledSwitcher("2A57", BLERead | BLEWrite); // creating the LED setting characteristic
-BLEBoolCharacteristic setZero("801AF775-722F-4E61-AE2A-06ECBE27381C", BLERead | BLEWrite); // setting this true causes the level to zero.
+BLEBoolCharacteristic setZero(SET_ZERO_SERVICE_UUID, BLERead | BLEWrite); // setting this true causes the level to zero.
 
 // global to see if we have the IMU Shield installed.
 boolean haveIMU = 0;
@@ -19,6 +19,11 @@ boolean haveIMU = 0;
 // Analog pin the LED is connected to.
 #define LED_PIN 2
 
+// epsilon for comparisons between angles to limit amount of BT updates.
+#define LEVEL_COMPARISON_EPSILON 0.001
+bool significantChange(float from, float to) {
+    return (fabs(from - to) > LEVEL_COMPARISON_EPSILON);
+}
 void setup() {
 
   Serial.begin(9600);
@@ -50,8 +55,8 @@ void setup() {
 
   // initialise the BTLE Radio
 	  if (BLE.begin()) {
-      BLE.setDeviceName("Orange Van");
-      BLE.setLocalName("Orange Van Level"); 
+      BLE.setDeviceName(DEVICE_NAME);
+      BLE.setLocalName(LOCAL_NAME); 
 
       BLE.setAdvertisedService(levelService);
 
@@ -108,10 +113,17 @@ void loop() {
     
     long previousMillis = 0;
 
-    while (central.connected()) { // while the central is connected:
+    float lastRoll = 0.0;
+    float lastPitch = 0.0;
+    float lastHeading = 0.0;
+
+    while (central.connected()) { // while a Bluetooth central is connected:
 
       long currentMillis = millis();
+
+
       if (currentMillis - previousMillis >= 200) {    // read every 200 millis and update the BT characteristics
+
         previousMillis = currentMillis;
 
         if(haveIMU){ 
@@ -120,15 +132,27 @@ void loop() {
 
             IMU.readEulerAngles(heading, roll, pitch);
 
-            Serial.print(heading);
-            Serial.print('\t');
-            Serial.print(roll);
-            Serial.print('\t');
-            Serial.println(pitch);
+            // Serial.print(heading);
+            // Serial.print('\t');
+            // Serial.print(roll);
+            // Serial.print('\t');
+            // Serial.println(pitch);
 
-            headingCharacteristic.writeValue(heading);
-            rollCharacteristic.writeValue(roll);
-            pitchCharacteristic.writeValue(pitch);
+            if (significantChange(heading, lastHeading)) {
+              lastHeading = heading;
+              headingCharacteristic.writeValue(double(heading));
+            }
+
+            if (significantChange(roll, lastRoll)) {
+
+              lastRoll = roll;
+              rollCharacteristic.writeValue(double(roll));
+            }
+
+            if( significantChange(pitch, lastPitch)) {
+              lastPitch = pitch;
+              pitchCharacteristic.writeValue(double(pitch));
+            }
           }
         }
 	
@@ -149,3 +173,7 @@ void loop() {
     digitalWrite(LED_BUILTIN, LOW); // Turn off the connection LED
   }
 }
+
+
+
+
