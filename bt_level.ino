@@ -113,9 +113,9 @@ void loop() {
     
     long previousMillis = 0;
 
-    float lastRoll = 0.0;
-    float lastPitch = 0.0;
-    float lastHeading = 0.0;
+    float lastRoll = -500.0;    // -500 ensures we send the first value.
+    float lastPitch = -500.0;
+    float lastHeading = -500.0;
 
     while (central.connected()) { // while a Bluetooth central is connected:
 
